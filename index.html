@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Static Paired Image Viewer (Local + URL)</title>
+  <title>Paired Image Viewer (File + URL)</title>
   <style>
     body {
       margin: 0;
@@ -78,6 +78,7 @@
 </head>
 <body>
   <div class="controls">
+    <!-- LEFT -->
     <div>
       <label>Left image (local):</label>
       <input id="fileLeft" type="file" accept=".png,.jpg,.jpeg,.webp">
@@ -91,6 +92,7 @@
       </div>
     </div>
 
+    <!-- RIGHT -->
     <div>
       <label>Right image (local):</label>
       <input id="fileRight" type="file" accept=".png,.jpg,.jpeg,.webp">
@@ -113,6 +115,7 @@
   </div>
 
   <script>
+    // DOM refs
     const fileLeft = document.getElementById('fileLeft');
     const fileRight = document.getElementById('fileRight');
     const urlLeft  = document.getElementById('urlLeft');
@@ -124,12 +127,12 @@
     const canvasRight = document.getElementById('canvasRight');
     const statusEl = document.getElementById('status');
 
+    // Images and shared view state
     let imgLeft = null;
     let imgRight = null;
     let imgWidth = null;
     let imgHeight = null;
 
-    // Shared view transform
     let scale = 1.0;
     let offsetX = 0;
     let offsetY = 0;
@@ -147,6 +150,7 @@
       const h = img.height;
 
       if (!imgWidth || !imgHeight) {
+        // first loaded image defines reference size
         imgWidth = w;
         imgHeight = h;
         setStatus(`Image size: ${imgWidth} × ${imgHeight}px`);
@@ -176,7 +180,7 @@
         const img = new Image();
         img.onload = () => setLoadedImage(img, side);
         img.onerror = () => {
-          alert("Failed to decode local image. Use PNG/JPEG.");
+          alert("Failed to decode local image. Use PNG/JPEG/WEBP.");
         };
         img.src = e.target.result; // data URL
       };
@@ -195,7 +199,7 @@
       }
     });
 
-    // ---------- Load from URL (cloud) ----------
+    // ---------- Load from URL (cloud/Box/GitHub/etc.) ----------
 
     function loadFromUrl(url, side) {
       if (!url) {
@@ -203,13 +207,12 @@
         return;
       }
       const img = new Image();
-      // crossOrigin can be set if the server sends CORS headers,
-      // but it's not required just for drawing with drawImage().
+      // For some hosts, if you later want to export canvas, you might need:
       // img.crossOrigin = "anonymous";
 
       img.onload = () => setLoadedImage(img, side);
       img.onerror = () => {
-        alert("Failed to load image from URL. Check the URL or CORS settings.");
+        alert("Failed to load image from URL. Check the URL and permissions (Box sharing settings).");
       };
       img.src = url;
     }
