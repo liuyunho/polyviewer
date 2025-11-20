@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Paired Image Viewer (PNG/JPG/TIFF in browser)</title>
+  <title>Static Paired Image Viewer (Local + URL)</title>
   <style>
     body {
       margin: 0;
@@ -16,13 +16,36 @@
       padding: 8px 12px;
       border-bottom: 1px solid #ddd;
       display: flex;
-      gap: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
       align-items: center;
       font-size: 14px;
     }
 
-    .controls input[type="file"] {
+    .controls > div {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .controls label {
+      font-weight: 500;
+    }
+
+    input[type="file"] {
       font-size: 12px;
+    }
+
+    input[type="text"] {
+      width: 260px;
+      padding: 2px 4px;
+      font-size: 12px;
+    }
+
+    button {
+      font-size: 12px;
+      padding: 2px 8px;
+      cursor: pointer;
     }
 
     #viewerContainer {
@@ -49,23 +72,38 @@
       margin-left: auto;
       font-size: 12px;
       color: #555;
+      white-space: nowrap;
     }
   </style>
-
-  <!-- TIFF decoder: libtiff compiled to JS/WASM -->
-  <!-- If this URL ever 404s, check the tiff.js docs / CDN for the latest. -->
-  <script src="https://unpkg.com/tiff@0.16.0/dist/tiff.min.js"></script>
 </head>
 <body>
   <div class="controls">
-    <label>
-      Left image:
-      <input id="fileLeft" type="file" accept=".png,.jpg,.jpeg,.webp,.tif,.tiff">
-    </label>
-    <label>
-      Right image:
-      <input id="fileRight" type="file" accept=".png,.jpg,.jpeg,.webp,.tif,.tiff">
-    </label>
+    <div>
+      <label>Left image (local):</label>
+      <input id="fileLeft" type="file" accept=".png,.jpg,.jpeg,.webp">
+    </div>
+
+    <div>
+      <label>Left image URL (cloud):</label>
+      <div style="display:flex; gap:4px;">
+        <input id="urlLeft" type="text" placeholder="https://.../left.png">
+        <button id="btnLoadLeftUrl">Load left URL</button>
+      </div>
+    </div>
+
+    <div>
+      <label>Right image (local):</label>
+      <input id="fileRight" type="file" accept=".png,.jpg,.jpeg,.webp">
+    </div>
+
+    <div>
+      <label>Right image URL (cloud):</label>
+      <div style="display:flex; gap:4px;">
+        <input id="urlRight" type="text" placeholder="https://.../right.png">
+        <button id="btnLoadRightUrl">Load right URL</button>
+      </div>
+    </div>
+
     <span class="status" id="status">Load two images (same size) to begin</span>
   </div>
 
@@ -77,16 +115,21 @@
   <script>
     const fileLeft = document.getElementById('fileLeft');
     const fileRight = document.getElementById('fileRight');
+    const urlLeft  = document.getElementById('urlLeft');
+    const urlRight = document.getElementById('urlRight');
+    const btnLoadLeftUrl  = document.getElementById('btnLoadLeftUrl');
+    const btnLoadRightUrl = document.getElementById('btnLoadRightUrl');
+
     const canvasLeft = document.getElementById('canvasLeft');
     const canvasRight = document.getElementById('canvasRight');
     const statusEl = document.getElementById('status');
 
-    let imgLeft = null;   // Image or Canvas
-    let imgRight = null;  // Image or Canvas
+    let imgLeft = null;
+    let imgRight = null;
     let imgWidth = null;
     let imgHeight = null;
 
-    // Shared transform state
+    // Shared view transform
     let scale = 1.0;
     let offsetX = 0;
     let offsetY = 0;
@@ -95,18 +138,11 @@
     let lastX = 0;
     let lastY = 0;
 
-    // Initialize TIFF memory (enough for large 8000x8000 RGBA)
-    if (window.Tiff && typeof Tiff.initialize === "function") {
-      // 256 MB; adjust if needed
-      Tiff.initialize({ TOTAL_MEMORY: 268435456 });
-    }
-
     function setStatus(msg) {
       statusEl.textContent = msg;
     }
 
     function setLoadedImage(img, side) {
-      // img: HTMLImageElement or HTMLCanvasElement
       const w = img.width;
       const h = img.height;
 
@@ -132,68 +168,61 @@
       draw();
     }
 
-    function loadImage(file, side) {
-      const name = file.name.toLowerCase();
-      const ext = name.split('.').pop();
+    // ---------- Load from local file ----------
 
-      // --- TIFF branch: use Tiff.js ---
-      if (ext === 'tif' || ext === 'tiff') {
-        if (!window.Tiff) {
-          alert("Tiff.js not loaded; cannot decode TIFF in browser.");
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = e => {
-          try {
-            const buffer = e.target.result;  // ArrayBuffer
-
-            const tiff = new Tiff({ buffer });
-
-            // If multi-page, we just use the first directory by default
-            // const n = tiff.countDirectory(); tiff.setDirectory(0);
-
-            const canvas = tiff.toCanvas();
-            if (!canvas) {
-              throw new Error("tiff.toCanvas() returned null");
-            }
-            // canvas has width/height and can be drawn with drawImage()
-            setLoadedImage(canvas, side);
-          } catch (err) {
-            console.error("TIFF decode error:", err);
-            alert(
-              "Could not decode this TIFF in the browser.\n" +
-              "Some complex OME/BigTIFF formats are not fully supported."
-            );
-          }
+    function loadFromFile(file, side) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => setLoadedImage(img, side);
+        img.onerror = () => {
+          alert("Failed to decode local image. Use PNG/JPEG.");
         };
-        reader.readAsArrayBuffer(file);
-
-      // --- Normal image branch (PNG/JPEG/WEBP/etc.) ---
-      } else {
-        const reader = new FileReader();
-        reader.onload = e => {
-          const img = new Image();
-          img.onload = () => setLoadedImage(img, side);
-          img.onerror = () => {
-            alert("Browser could not decode this image. Try PNG/JPEG/TIFF.");
-          };
-          img.src = e.target.result; // data URL
-        };
-        reader.readAsDataURL(file);
-      }
+        img.src = e.target.result; // data URL
+      };
+      reader.readAsDataURL(file);
     }
 
     fileLeft.addEventListener('change', e => {
       if (e.target.files && e.target.files[0]) {
-        loadImage(e.target.files[0], 'left');
+        loadFromFile(e.target.files[0], 'left');
       }
     });
 
     fileRight.addEventListener('change', e => {
       if (e.target.files && e.target.files[0]) {
-        loadImage(e.target.files[0], 'right');
+        loadFromFile(e.target.files[0], 'right');
       }
     });
+
+    // ---------- Load from URL (cloud) ----------
+
+    function loadFromUrl(url, side) {
+      if (!url) {
+        alert("Please enter an image URL.");
+        return;
+      }
+      const img = new Image();
+      // crossOrigin can be set if the server sends CORS headers,
+      // but it's not required just for drawing with drawImage().
+      // img.crossOrigin = "anonymous";
+
+      img.onload = () => setLoadedImage(img, side);
+      img.onerror = () => {
+        alert("Failed to load image from URL. Check the URL or CORS settings.");
+      };
+      img.src = url;
+    }
+
+    btnLoadLeftUrl.addEventListener('click', () => {
+      loadFromUrl(urlLeft.value.trim(), 'left');
+    });
+
+    btnLoadRightUrl.addEventListener('click', () => {
+      loadFromUrl(urlRight.value.trim(), 'right');
+    });
+
+    // ---------- Viewer / canvas logic ----------
 
     function resizeCanvases() {
       const rectL = canvasLeft.getBoundingClientRect();
@@ -226,7 +255,6 @@
     function drawOne(ctx, canvas, img) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
       if (!img) return;
 
       ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
@@ -321,7 +349,7 @@
       }
     });
 
-    // Initialize canvas sizes
+    // Init
     resizeCanvases();
   </script>
 </body>
