@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Paired Image Viewer (File + URL)</title>
+  <title>Paired Image Viewer (File + URL + Presets)</title>
   <style>
     body {
       margin: 0;
@@ -42,6 +42,11 @@
       font-size: 12px;
     }
 
+    select {
+      font-size: 12px;
+      padding: 2px 4px;
+    }
+
     button {
       font-size: 12px;
       padding: 2px 8px;
@@ -78,7 +83,7 @@
 </head>
 <body>
   <div class="controls">
-    <!-- LEFT -->
+    <!-- LEFT: file + URL + preset -->
     <div>
       <label>Left image (local):</label>
       <input id="fileLeft" type="file" accept=".png,.jpg,.jpeg,.webp">
@@ -92,7 +97,26 @@
       </div>
     </div>
 
-    <!-- RIGHT -->
+    <div>
+      <label>Left preset (Wiki, 下拉菜单):</label>
+      <div style="display:flex; gap:4px;">
+        <select id="presetLeft">
+          <option value="">-- select preset --</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/800px-Fronalpstock_big.jpg">
+            1 – Swiss Alps (Fronalpstock)
+          </option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Test_image.jpg/800px-Test_image.jpg">
+            2 – Test image
+          </option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Vd-Orig.png/800px-Vd-Orig.png">
+            3 – Lena-like demo (Vd-Orig)
+          </option>
+        </select>
+        <button id="btnLoadLeftPreset">Load left preset</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: file + URL + preset -->
     <div>
       <label>Right image (local):</label>
       <input id="fileRight" type="file" accept=".png,.jpg,.jpeg,.webp">
@@ -103,6 +127,25 @@
       <div style="display:flex; gap:4px;">
         <input id="urlRight" type="text" placeholder="https://.../right.png">
         <button id="btnLoadRightUrl">Load right URL</button>
+      </div>
+    </div>
+
+    <div>
+      <label>Right preset (Wiki, 下拉菜单):</label>
+      <div style="display:flex; gap:4px;">
+        <select id="presetRight">
+          <option value="">-- select preset --</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/800px-Fronalpstock_big.jpg">
+            1 – Swiss Alps (Fronalpstock)
+          </option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Test_image.jpg/800px-Test_image.jpg">
+            2 – Test image
+          </option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Vd-Orig.png/800px-Vd-Orig.png">
+            3 – Lena-like demo (Vd-Orig)
+          </option>
+        </select>
+        <button id="btnLoadRightPreset">Load right preset</button>
       </div>
     </div>
 
@@ -122,6 +165,11 @@
     const urlRight = document.getElementById('urlRight');
     const btnLoadLeftUrl  = document.getElementById('btnLoadLeftUrl');
     const btnLoadRightUrl = document.getElementById('btnLoadRightUrl');
+
+    const presetLeft  = document.getElementById('presetLeft');
+    const presetRight = document.getElementById('presetRight');
+    const btnLoadLeftPreset  = document.getElementById('btnLoadLeftPreset');
+    const btnLoadRightPreset = document.getElementById('btnLoadRightPreset');
 
     const canvasLeft = document.getElementById('canvasLeft');
     const canvasRight = document.getElementById('canvasRight');
@@ -199,20 +247,20 @@
       }
     });
 
-    // ---------- Load from URL (cloud/Box/GitHub/etc.) ----------
+    // ---------- Load from URL (cloud/Box/Drive/GitHub/etc.) ----------
 
     function loadFromUrl(url, side) {
       if (!url) {
-        alert("Please enter an image URL.");
+        alert("Please enter an image URL or choose a preset.");
         return;
       }
       const img = new Image();
-      // For some hosts, if you later want to export canvas, you might need:
+      // If the host supports CORS and you later want to export canvas, you could use:
       // img.crossOrigin = "anonymous";
 
       img.onload = () => setLoadedImage(img, side);
       img.onerror = () => {
-        alert("Failed to load image from URL. Check the URL and permissions (Box sharing settings).");
+        alert("Failed to load image from URL. Check the URL and permissions.");
       };
       img.src = url;
     }
@@ -223,6 +271,18 @@
 
     btnLoadRightUrl.addEventListener('click', () => {
       loadFromUrl(urlRight.value.trim(), 'right');
+    });
+
+    // ---------- Load from preset 下拉菜单 ----------
+
+    btnLoadLeftPreset.addEventListener('click', () => {
+      const url = presetLeft.value;
+      loadFromUrl(url, 'left');
+    });
+
+    btnLoadRightPreset.addEventListener('click', () => {
+      const url = presetRight.value;
+      loadFromUrl(url, 'right');
     });
 
     // ---------- Viewer / canvas logic ----------
