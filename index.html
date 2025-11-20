@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Paired Image Viewer (PNG/JPG/TIFF in browser)</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .controls {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .controls input[type="file"] {
+      font-size: 12px;
+    }
+
+    #viewerContainer {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: #ccc;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #111;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    .status {
+      margin-left: auto;
+      font-size: 12px;
+      color: #555;
+    }
+  </style>
+
+  <!-- TIFF decoder: libtiff compiled to JS/WASM -->
+  <!-- If this URL ever 404s, check the tiff.js docs / CDN for the latest. -->
+  <script src="https://unpkg.com/tiff@0.16.0/dist/tiff.min.js"></script>
+</head>
+<body>
+  <div class="controls">
+    <label>
+      Left image:
+      <input id="fileLeft" type="file" accept=".png,.jpg,.jpeg,.webp,.tif,.tiff">
+    </label>
+    <label>
+      Right image:
+      <input id="fileRight" type="file" accept=".png,.jpg,.jpeg,.webp,.tif,.tiff">
+    </label>
+    <span class="status" id="status">Load two images (same size) to begin</span>
+  </div>
+
+  <div id="viewerContainer">
+    <canvas id="canvasLeft"></canvas>
+    <canvas id="canvasRight"></canvas>
+  </div>
+
+  <script>
+    const fileLeft = document.getElementById('fileLeft');
+    const fileRight = document.getElementById('fileRight');
+    const canvasLeft = document.getElementById('canvasLeft');
+    const canvasRight = document.getElementById('canvasRight');
+    const statusEl = document.getElementById('status');
+
+    let imgLeft = null;   // Image or Canvas
+    let imgRight = null;  // Image or Canvas
+    let imgWidth = null;
+    let imgHeight = null;
+
+    // Shared transform state
+    let scale = 1.0;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    let isPanning = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    // Initialize TIFF memory (enough for large 8000x8000 RGBA)
+    if (window.Tiff && typeof Tiff.initialize === "function") {
+      // 256 MB; adjust if needed
+      Tiff.initialize({ TOTAL_MEMORY: 268435456 });
+    }
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    function setLoadedImage(img, side) {
+      // img: HTMLImageElement or HTMLCanvasElement
+      const w = img.width;
+      const h = img.height;
+
+      if (!imgWidth || !imgHeight) {
+        imgWidth = w;
+        imgHeight = h;
+        setStatus(`Image size: ${imgWidth} × ${imgHeight}px`);
+      } else if (w !== imgWidth || h !== imgHeight) {
+        alert(
+          `The two images must have the same size.\n` +
+          `First: ${imgWidth}×${imgHeight}, new: ${w}×${h}`
+        );
+        return;
+      }
+
+      if (side === 'left') {
+        imgLeft = img;
+      } else {
+        imgRight = img;
+      }
+
+      resetView();
+      draw();
+    }
+
+    function loadImage(file, side) {
+      const name = file.name.toLowerCase();
+      const ext = name.split('.').pop();
+
+      // --- TIFF branch: use Tiff.js ---
+      if (ext === 'tif' || ext === 'tiff') {
+        if (!window.Tiff) {
+          alert("Tiff.js not loaded; cannot decode TIFF in browser.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const buffer = e.target.result;  // ArrayBuffer
+
+            const tiff = new Tiff({ buffer });
+
+            // If multi-page, we just use the first directory by default
+            // const n = tiff.countDirectory(); tiff.setDirectory(0);
+
+            const canvas = tiff.toCanvas();
+            if (!canvas) {
+              throw new Error("tiff.toCanvas() returned null");
+            }
+            // canvas has width/height and can be drawn with drawImage()
+            setLoadedImage(canvas, side);
+          } catch (err) {
+            console.error("TIFF decode error:", err);
+            alert(
+              "Could not decode this TIFF in the browser.\n" +
+              "Some complex OME/BigTIFF formats are not fully supported."
+            );
+          }
+        };
+        reader.readAsArrayBuffer(file);
+
+      // --- Normal image branch (PNG/JPEG/WEBP/etc.) ---
+      } else {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = new Image();
+          img.onload = () => setLoadedImage(img, side);
+          img.onerror = () => {
+            alert("Browser could not decode this image. Try PNG/JPEG/TIFF.");
+          };
+          img.src = e.target.result; // data URL
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    fileLeft.addEventListener('change', e => {
+      if (e.target.files && e.target.files[0]) {
+        loadImage(e.target.files[0], 'left');
+      }
+    });
+
+    fileRight.addEventListener('change', e => {
+      if (e.target.files && e.target.files[0]) {
+        loadImage(e.target.files[0], 'right');
+      }
+    });
+
+    function resizeCanvases() {
+      const rectL = canvasLeft.getBoundingClientRect();
+      const rectR = canvasRight.getBoundingClientRect();
+
+      if (canvasLeft.width !== rectL.width || canvasLeft.height !== rectL.height) {
+        canvasLeft.width = rectL.width;
+        canvasLeft.height = rectL.height;
+      }
+      if (canvasRight.width !== rectR.width || canvasRight.height !== rectR.height) {
+        canvasRight.width = rectR.width;
+        canvasRight.height = rectR.height;
+      }
+    }
+
+    function resetView() {
+      if (!imgWidth || !imgHeight) return;
+
+      resizeCanvases();
+      const rect = canvasLeft.getBoundingClientRect();
+
+      const scaleX = rect.width / imgWidth;
+      const scaleY = rect.height / imgHeight;
+      scale = Math.min(scaleX, scaleY);
+
+      offsetX = (rect.width - imgWidth * scale) / 2;
+      offsetY = (rect.height - imgHeight * scale) / 2;
+    }
+
+    function drawOne(ctx, canvas, img) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!img) return;
+
+      ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+      ctx.drawImage(img, 0, 0);
+    }
+
+    function draw() {
+      resizeCanvases();
+      const ctxL = canvasLeft.getContext('2d');
+      const ctxR = canvasRight.getContext('2d');
+
+      drawOne(ctxL, canvasLeft, imgLeft);
+      drawOne(ctxR, canvasRight, imgRight);
+
+      if (imgWidth && imgHeight) {
+        setStatus(`Zoom: ${(scale * 100).toFixed(1)}%`);
+      }
+    }
+
+    function getCanvasCoords(canvas, event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+
+    function handleWheel(canvas, event) {
+      if (!imgWidth || !imgHeight) return;
+      event.preventDefault();
+
+      const { x, y } = getCanvasCoords(canvas, event);
+      const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = scale * zoomFactor;
+
+      const minScale = 0.05;
+      const maxScale = 20;
+      if (newScale < minScale || newScale > maxScale) return;
+
+      const worldX = (x - offsetX) / scale;
+      const worldY = (y - offsetY) / scale;
+
+      scale = newScale;
+      offsetX = x - worldX * scale;
+      offsetY = y - worldY * scale;
+
+      draw();
+    }
+
+    function handleMouseDown(canvas, event) {
+      if (!imgWidth || !imgHeight) return;
+      isPanning = true;
+      const { x, y } = getCanvasCoords(canvas, event);
+      lastX = x;
+      lastY = y;
+    }
+
+    function handleMouseMove(canvas, event) {
+      if (!isPanning) return;
+      const { x, y } = getCanvasCoords(canvas, event);
+      const dx = x - lastX;
+      const dy = y - lastY;
+      lastX = x;
+      lastY = y;
+
+      offsetX += dx;
+      offsetY += dy;
+
+      draw();
+    }
+
+    function handleMouseUp() {
+      isPanning = false;
+    }
+
+    function attachInteractions(canvas) {
+      canvas.addEventListener('wheel', e => handleWheel(canvas, e), { passive: false });
+      canvas.addEventListener('mousedown', e => handleMouseDown(canvas, e));
+      canvas.addEventListener('mousemove', e => handleMouseMove(canvas, e));
+      window.addEventListener('mouseup', handleMouseUp);
+      canvas.addEventListener('mouseleave', handleMouseUp);
+    }
+
+    attachInteractions(canvasLeft);
+    attachInteractions(canvasRight);
+
+    window.addEventListener('resize', () => {
+      if (imgWidth && imgHeight) {
+        draw();
+      } else {
+        resizeCanvases();
+      }
+    });
+
+    // Initialize canvas sizes
+    resizeCanvases();
+  </script>
+</body>
+</html>
