@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>4-Panel Synced Image Viewer (Static / GitHub Pages)</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .controls {
+      padding: 10px 12px;
+      border-bottom: 1px solid #ddd;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: start;
+      font-size: 14px;
+    }
+
+    .panel {
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: 10px;
+      background: #fafafa;
+    }
+
+    .panel-title {
+      font-weight: 700;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 6px 0;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    input[type="file"] {
+      font-size: 12px;
+    }
+
+    input[type="text"] {
+      width: min(520px, 100%);
+      padding: 3px 6px;
+      font-size: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: white;
+    }
+
+    select {
+      font-size: 12px;
+      padding: 3px 6px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: white;
+      width: min(520px, 100%);
+    }
+
+    button {
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: white;
+    }
+    button:hover { background: #f3f3f3; }
+
+    .topbar {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .status {
+      margin-left: auto;
+      font-size: 12px;
+      color: #444;
+      white-space: nowrap;
+    }
+
+    #viewerContainer {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 1px;
+      background: #ccc;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #111;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Global controls -->
+  <div class="topbar">
+    <button id="btnReset">Reset view</button>
+    <button id="btnClear">Clear all</button>
+    <button id="btnLoadDefaults">Load defaults from ./data</button>
+    <span class="hint">Wheel = zoom, Drag = pan (synced across 4 panels). Images should be same pixel size.</span>
+    <span class="status" id="status">Load up to 4 images (PNG/JPG/WEBP) — static GitHub Pages friendly</span>
+  </div>
+
+  <!-- 4 panel controls (TL/TR/BL/BR) -->
+  <div class="controls">
+    <!-- TL -->
+    <div class="panel">
+      <div class="panel-title">
+        <div>TL (Top-Left)</div>
+        <button data-clear="tl">Clear TL</button>
+      </div>
+
+      <div class="row">
+        <label>Local:</label>
+        <input id="file_tl" type="file" accept=".png,.jpg,.jpeg,.webp">
+      </div>
+
+      <div class="row">
+        <label>URL:</label>
+        <input id="url_tl" type="text" placeholder="https://.../tl.png  OR  ./data/tl.png">
+        <button id="btnLoadUrl_tl">Load</button>
+      </div>
+
+      <div class="row">
+        <label>Preset:</label>
+        <select id="preset_tl">
+          <option value="">-- select preset --</option>
+          <!-- GitHub Pages (same repo) examples -->
+          <option value="./data/tl.png">./data/tl.png</option>
+          <option value="./data/a.png">./data/a.png</option>
+
+          <!-- Public examples -->
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Test_image.jpg/800px-Test_image.jpg">Wiki – Test image</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/800px-Fronalpstock_big.jpg">Wiki – Swiss Alps</option>
+        </select>
+        <button id="btnLoadPreset_tl">Load</button>
+      </div>
+    </div>
+
+    <!-- TR -->
+    <div class="panel">
+      <div class="panel-title">
+        <div>TR (Top-Right)</div>
+        <button data-clear="tr">Clear TR</button>
+      </div>
+
+      <div class="row">
+        <label>Local:</label>
+        <input id="file_tr" type="file" accept=".png,.jpg,.jpeg,.webp">
+      </div>
+
+      <div class="row">
+        <label>URL:</label>
+        <input id="url_tr" type="text" placeholder="https://.../tr.png  OR  ./data/tr.png">
+        <button id="btnLoadUrl_tr">Load</button>
+      </div>
+
+      <div class="row">
+        <label>Preset:</label>
+        <select id="preset_tr">
+          <option value="">-- select preset --</option>
+          <option value="./data/tr.png">./data/tr.png</option>
+          <option value="./data/b.png">./data/b.png</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Test_image.jpg/800px-Test_image.jpg">Wiki – Test image</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/800px-Fronalpstock_big.jpg">Wiki – Swiss Alps</option>
+        </select>
+        <button id="btnLoadPreset_tr">Load</button>
+      </div>
+    </div>
+
+    <!-- BL -->
+    <div class="panel">
+      <div class="panel-title">
+        <div>BL (Bottom-Left)</div>
+        <button data-clear="bl">Clear BL</button>
+      </div>
+
+      <div class="row">
+        <label>Local:</label>
+        <input id="file_bl" type="file" accept=".png,.jpg,.jpeg,.webp">
+      </div>
+
+      <div class="row">
+        <label>URL:</label>
+        <input id="url_bl" type="text" placeholder="https://.../bl.png  OR  ./data/bl.png">
+        <button id="btnLoadUrl_bl">Load</button>
+      </div>
+
+      <div class="row">
+        <label>Preset:</label>
+        <select id="preset_bl">
+          <option value="">-- select preset --</option>
+          <option value="./data/bl.png">./data/bl.png</option>
+          <option value="./data/c.png">./data/c.png</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Test_image.jpg/800px-Test_image.jpg">Wiki – Test image</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/800px-Fronalpstock_big.jpg">Wiki – Swiss Alps</option>
+        </select>
+        <button id="btnLoadPreset_bl">Load</button>
+      </div>
+    </div>
+
+    <!-- BR -->
+    <div class="panel">
+      <div class="panel-title">
+        <div>BR (Bottom-Right)</div>
+        <button data-clear="br">Clear BR</button>
+      </div>
+
+      <div class="row">
+        <label>Local:</label>
+        <input id="file_br" type="file" accept=".png,.jpg,.jpeg,.webp">
+      </div>
+
+      <div class="row">
+        <label>URL:</label>
+        <input id="url_br" type="text" placeholder="https://.../br.png  OR  ./data/br.png">
+        <button id="btnLoadUrl_br">Load</button>
+      </div>
+
+      <div class="row">
+        <label>Preset:</label>
+        <select id="preset_br">
+          <option value="">-- select preset --</option>
+          <option value="./data/br.png">./data/br.png</option>
+          <option value="./data/d.png">./data/d.png</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Test_image.jpg/800px-Test_image.jpg">Wiki – Test image</option>
+          <option value="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Fronalpstock_big.jpg/800px-Fronalpstock_big.jpg">Wiki – Swiss Alps</option>
+        </select>
+        <button id="btnLoadPreset_br">Load</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Viewer (2x2 canvases) -->
+  <div id="viewerContainer">
+    <canvas id="canvas_tl"></canvas>
+    <canvas id="canvas_tr"></canvas>
+    <canvas id="canvas_bl"></canvas>
+    <canvas id="canvas_br"></canvas>
+  </div>
+
+  <script>
+    // ---------- State ----------
+    const statusEl = document.getElementById('status');
+    const sides = ['tl','tr','bl','br'];
+
+    const canvases = {
+      tl: document.getElementById('canvas_tl'),
+      tr: document.getElementById('canvas_tr'),
+      bl: document.getElementById('canvas_bl'),
+      br: document.getElementById('canvas_br')
+    };
+
+    const files = {
+      tl: document.getElementById('file_tl'),
+      tr: document.getElementById('file_tr'),
+      bl: document.getElementById('file_bl'),
+      br: document.getElementById('file_br')
+    };
+
+    const urls = {
+      tl: document.getElementById('url_tl'),
+      tr: document.getElementById('url_tr'),
+      bl: document.getElementById('url_bl'),
+      br: document.getElementById('url_br')
+    };
+
+    const presets = {
+      tl: document.getElementById('preset_tl'),
+      tr: document.getElementById('preset_tr'),
+      bl: document.getElementById('preset_bl'),
+      br: document.getElementById('preset_br')
+    };
+
+    const images = { tl: null, tr: null, bl: null, br: null };
+
+    // Reference size (all images must match)
+    let imgWidth = null;
+    let imgHeight = null;
+
+    // Shared view state (synced)
+    let scale = 1.0;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // Pan state
+    let isPanning = false;
+    let lastClientX = 0;
+    let lastClientY = 0;
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    // ---------- Canvas sizing / drawing ----------
+    function resizeCanvases() {
+      for (const s of sides) {
+        const c = canvases[s];
+        const rect = c.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width));
+        const h = Math.max(1, Math.floor(rect.height));
+        if (c.width !== w) c.width = w;
+        if (c.height !== h) c.height = h;
+      }
+    }
+
+    function resetView() {
+      if (!imgWidth || !imgHeight) return;
+      resizeCanvases();
+      const rect = canvases.tl.getBoundingClientRect();
+      const sx = rect.width / imgWidth;
+      const sy = rect.height / imgHeight;
+      scale = Math.min(sx, sy);
+      offsetX = (rect.width - imgWidth * scale) / 2;
+      offsetY = (rect.height - imgHeight * scale) / 2;
+    }
+
+    function drawOne(ctx, canvas, img) {
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if (!img) return;
+      ctx.setTransform(scale,0,0,scale,offsetX,offsetY);
+      ctx.drawImage(img, 0, 0);
+    }
+
+    function draw() {
+      resizeCanvases();
+      for (const s of sides) {
+        const ctx = canvases[s].getContext('2d');
+        drawOne(ctx, canvases[s], images[s]);
+      }
+
+      if (imgWidth && imgHeight) {
+        setStatus(`Image size: ${imgWidth}×${imgHeight}px  |  Zoom: ${(scale * 100).toFixed(1)}%`);
+      } else {
+        setStatus("Load up to 4 images (PNG/JPG/WEBP). For GitHub Pages, put images in ./data/ and use ./data/xxx.png");
+      }
+    }
+
+    // ---------- Image loading helpers ----------
+    function setLoadedImage(img, side) {
+      const w = img.width;
+      const h = img.height;
+
+      if (!imgWidth || !imgHeight) {
+        imgWidth = w;
+        imgHeight = h;
+      } else if (w !== imgWidth || h !== imgHeight) {
+        alert(`All images must have the same size.\nExpected: ${imgWidth}×${imgHeight}\nGot: ${w}×${h}`);
+        return;
+      }
+
+      images[side] = img;
+      resetView();
+      draw();
+    }
+
+    // Load from local file (PNG/JPG/WEBP)
+    function loadFromFile(file, side) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => setLoadedImage(img, side);
+        img.onerror = () => alert("Failed to decode local image. Please use PNG/JPEG/WEBP.");
+        img.src = e.target.result; // data URL
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Load from URL (supports relative paths like ./data/tl.png on GitHub Pages)
+    function loadFromUrl(url, side) {
+      if (!url) {
+        alert("Please enter an image URL or choose a preset.");
+        return;
+      }
+      const img = new Image();
+
+      // If you later need to export canvas or read pixels, CORS matters.
+      // For same-origin (GitHub Pages + ./data/), it's fine.
+      // img.crossOrigin = "anonymous";
+
+      img.onload = () => setLoadedImage(img, side);
+      img.onerror = () => alert("Failed to load image from URL. Check the URL and permissions (CORS).");
+      img.src = url;
+    }
+
+    // ---------- Bind UI ----------
+    for (const s of sides) {
+      files[s].addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (f) loadFromFile(f, s);
+      });
+
+      document.getElementById(`btnLoadUrl_${s}`).addEventListener('click', () => {
+        loadFromUrl(urls[s].value.trim(), s);
+      });
+
+      document.getElementById(`btnLoadPreset_${s}`).addEventListener('click', () => {
+        const u = presets[s].value;
+        if (!u) { alert("Please select a preset first."); return; }
+        loadFromUrl(u, s);
+      });
+    }
+
+    // Clear individual
+    document.querySelectorAll('button[data-clear]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const side = btn.getAttribute('data-clear');
+        images[side] = null;
+        draw();
+      });
+    });
+
+    // Global buttons
+    document.getElementById('btnReset').addEventListener('click', () => {
+      resetView();
+      draw();
+    });
+
+    document.getElementById('btnClear').addEventListener('click', () => {
+      for (const s of sides) images[s] = null;
+      imgWidth = null; imgHeight = null;
+      scale = 1.0; offsetX = 0; offsetY = 0;
+      draw();
+    });
+
+    // Load defaults from ./data
+    // You can change these four file names to your actual ones:
+    // e.g. ./data/img1.png ./data/img2.png ./data/img3.png ./data/img4.png
+    document.getElementById('btnLoadDefaults').addEventListener('click', () => {
+      const defaults = {
+        tl: "./data/tl.png",
+        tr: "./data/tr.png",
+        bl: "./data/bl.png",
+        br: "./data/br.png"
+      };
+      for (const s of sides) loadFromUrl(defaults[s], s);
+    });
+
+    // ---------- Synced interactions ----------
+    function getCanvasCoords(canvas, event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    function handleWheel(canvas, event) {
+      if (!imgWidth || !imgHeight) return;
+      event.preventDefault();
+
+      const { x, y } = getCanvasCoords(canvas, event);
+      const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = scale * zoomFactor;
+
+      const minScale = 0.05;
+      const maxScale = 30;
+      if (newScale < minScale || newScale > maxScale) return;
+
+      const worldX = (x - offsetX) / scale;
+      const worldY = (y - offsetY) / scale;
+
+      scale = newScale;
+      offsetX = x - worldX * scale;
+      offsetY = y - worldY * scale;
+
+      draw();
+    }
+
+    function handleMouseDown(event) {
+      if (!imgWidth || !imgHeight) return;
+      isPanning = true;
+      lastClientX = event.clientX;
+      lastClientY = event.clientY;
+    }
+
+    function handleMouseMove(event) {
+      if (!isPanning) return;
+      const dx = event.clientX - lastClientX;
+      const dy = event.clientY - lastClientY;
+      lastClientX = event.clientX;
+      lastClientY = event.clientY;
+      offsetX += dx;
+      offsetY += dy;
+      draw();
+    }
+
+    function handleMouseUp() { isPanning = false; }
+
+    for (const s of sides) {
+      const c = canvases[s];
+      c.addEventListener('wheel', (e) => handleWheel(c, e), { passive: false });
+      c.addEventListener('mousedown', handleMouseDown);
+    }
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    // Resize redraw
+    window.addEventListener('resize', () => {
+      if (imgWidth && imgHeight) resetView();
+      draw();
+    });
+
+    // Init
+    resizeCanvases();
+    draw();
+  </script>
+</body>
+</html>
